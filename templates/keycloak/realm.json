@@ -1,0 +1,147 @@
+{
+  "realm": "matrix",
+  "enabled": true,
+  "displayName": "Matrix SSO",
+  "sslRequired": "none",
+  "registrationAllowed": true,
+  "registrationEmailAsUsername": false,
+  "editUsernameAllowed": false,
+  "resetPasswordAllowed": true,
+  "loginWithEmailAllowed": true,
+  "duplicateEmailsAllowed": false,
+  "verifyEmail": false,
+  "rememberMe": true,
+  "accessTokenLifespan": 300,
+  "ssoSessionIdleTimeout": 1800,
+  "ssoSessionMaxLifespan": 36000,
+  "offlineSessionIdleTimeout": 2592000,
+  "offlineSessionMaxLifespan": 5184000,
+  "groups": [
+    { "name": "matrix-users", "path": "/matrix-users" }
+  ],
+  "roles": {
+    "realm": [
+      { "name": "matrix-user", "description": "Пользователь Matrix" }
+    ]
+  },
+  "defaultRoles": ["offline_access", "uma_authorization", "matrix-user"],
+  "clients": [
+    {
+      "clientId": "matrix",
+      "name": "Synapse (нативный OIDC)",
+      "description": "OIDC-клиент Synapse для входа через SSO",
+      "enabled": true,
+      "protocol": "openid-connect",
+      "publicClient": false,
+      "secret": "${KEYCLOAK_CLIENT_SECRET}",
+      "bearerOnly": false,
+      "standardFlowEnabled": true,
+      "implicitFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": false,
+      "frontchannelLogout": true,
+      "fullScopeAllowed": true,
+      "rootUrl": "https://${MATRIX_DOMAIN}",
+      "baseUrl": "/",
+      "adminUrl": "",
+      "redirectUris": [
+        "https://${MATRIX_DOMAIN}/_synapse/client/oidc/callback"
+      ],
+      "webOrigins": [
+        "https://${MATRIX_DOMAIN}",
+        "https://${ELEMENT_DOMAIN}"
+      ],
+      "attributes": {
+        "post.logout.redirect.uris": "+",
+        "pkce.code.challenge.method": "S256",
+        "access.token.lifespan": "300",
+        "oauth2.device.authorization.grant.enabled": "false"
+      },
+      "defaultClientScopes": [
+        "profile",
+        "email",
+        "roles",
+        "web-origins"
+      ],
+      "optionalClientScopes": [
+        "offline_access",
+        "address",
+        "phone"
+      ],
+      "protocolMappers": [
+        {
+          "name": "preferred_username",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-usermodel-property-mapper",
+          "consentRequired": false,
+          "config": {
+            "user.attribute": "username",
+            "claim.name": "preferred_username",
+            "jsonType.label": "String",
+            "id.token.claim": "true",
+            "access.token.claim": "true",
+            "userinfo.token.claim": "true",
+            "user.attribute.immutable": "true"
+          }
+        }
+      ]
+    },
+    {
+      "clientId": "matrix-authentication-service",
+      "name": "Matrix Authentication Service (legacy)",
+      "description": "OIDC-клиент MAS для legacy-режима ENABLE_MAS=1",
+      "enabled": true,
+      "protocol": "openid-connect",
+      "publicClient": false,
+      "secret": "${KEYCLOAK_CLIENT_SECRET}",
+      "bearerOnly": false,
+      "standardFlowEnabled": true,
+      "implicitFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": false,
+      "frontchannelLogout": true,
+      "rootUrl": "https://${MAS_DOMAIN}",
+      "baseUrl": "/",
+      "adminUrl": "",
+      "redirectUris": [
+        "https://${MAS_DOMAIN}/upstream/callback/${MAS_OIDC_PROVIDER_ID}",
+        "https://${MAS_DOMAIN}/*"
+      ],
+      "webOrigins": [
+        "https://${MAS_DOMAIN}"
+      ],
+      "attributes": {
+        "post.logout.redirect.uris": "+",
+        "pkce.code.challenge.method": "S256"
+      },
+      "defaultClientScopes": [
+        "profile",
+        "email",
+        "roles",
+        "web-origins"
+      ],
+      "optionalClientScopes": [
+        "offline_access"
+      ]
+    }
+  ],
+  "users": [
+    {
+      "username": "${KEYCLOAK_ADMIN_USER}",
+      "email": "${ADMIN_EMAIL}",
+      "firstName": "Matrix",
+      "lastName": "Admin",
+      "enabled": true,
+      "emailVerified": true,
+      "credentials": [
+        {
+          "type": "password",
+          "value": "${KEYCLOAK_ADMIN_PASSWORD}",
+          "temporary": false
+        }
+      ],
+      "realmRoles": ["matrix-user"],
+      "groups": ["/matrix-users"]
+    }
+  ]
+}

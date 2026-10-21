@@ -1,0 +1,26 @@
+# Файлы конфигурации с секретами
+config/matrix.env
+.env
+*.env
+!config/matrix.env.example
+
+# Каталог стека (создаётся установщиком)
+/opt/matrix/
+
+# Бэкапы и логи
+*.log
+backup/
+
+# Ключи и сертификаты
+*.key
+*.pem
+*.crt
+*.p12
+certbot/
+
+# Прочее
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp

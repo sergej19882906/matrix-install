@@ -1,0 +1,7 @@
+
+  - job_name: mas
+    metrics_path: /metrics
+    static_configs:
+      - targets: ["mas:8080"]
+        labels:
+          service: mas

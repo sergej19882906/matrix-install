@@ -1,0 +1,84 @@
+# ===========================================================================
+#  Matrix Authentication Service (MAS) — конфигурация (YAML)
+#  LEGACY-режим: требует закреплённой старой версии Synapse (msc3861).
+#  MAS задеприкейтирован (релиз 0.11.0, сентябрь 2024).
+# ===========================================================================
+
+http:
+  listeners:
+    - name: web
+      resources:
+        - name: discovery
+        - name: human
+        - name: oauth
+        - name: compat
+        - name: graphql
+        - name: assets
+      binds:
+        - address: "0.0.0.0:8080"
+    - name: internal
+      resources:
+        - name: health
+      binds:
+        - host: 127.0.0.1
+          port: 8081
+  trusted_proxies:
+    - "${DOCKER_SUBNET}"
+    - "127.0.0.0/8"
+    - "::1/128"
+  public_base: "https://${MAS_DOMAIN}/"
+  issuer: "https://${MAS_DOMAIN}/"
+
+database:
+  uri: "postgresql://mas:${MAS_DB_PASSWORD}@postgres:5432/mas"
+  max_connections: 10
+
+email:
+  from: '"Matrix Authentication Service" <${ADMIN_EMAIL}>'
+  transport: blackhole
+
+secrets:
+  # Ключ шифрования секретов в базе. НЕ МЕНЯТЬ после первого запуска.
+  encryption: "${MAS_ENCRYPTION_KEY}"
+
+passwords:
+  enabled: true
+  schemes:
+    - version: 1
+      algorithm: argon2id
+  minimum_complexity: 3
+
+matrix:
+  # server_name homeserver
+  homeserver: "${SERVER_NAME}"
+  # Общий секрет для вызова admin API Synapse
+  secret: "${MAS_SHARED_SECRET}"
+  endpoint: "http://synapse:8008/"
+
+# Клиент, которым пользуется Synapse (совпадает с experimental_features.msc3861)
+clients:
+  - client_id: "0000000000000000000SYNAPSE"
+    client_auth_method: client_secret_basic
+    client_secret: "${MAS_CLIENT_SECRET}"
+
+# Вход через внешний OIDC-провайдер (Keycloak)
+upstream_oauth2:
+  providers:
+    - id: "${MAS_OIDC_PROVIDER_ID}"
+      human_name: "Keycloak"
+      issuer: "https://${KEYCLOAK_DOMAIN}/realms/matrix"
+      client_id: "matrix-authentication-service"
+      client_secret: "${KEYCLOAK_CLIENT_SECRET}"
+      token_endpoint_auth_method: client_secret_basic
+      scope: "openid profile email"
+      claims_imports:
+        localpart:
+          action: require
+          template: "{{ user.preferred_username }}"
+        displayname:
+          action: suggest
+          template: "{{ user.name }}"
+        email:
+          action: suggest
+          template: "{{ user.email }}"
+          set_email_verification: always

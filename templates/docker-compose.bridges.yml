@@ -1,0 +1,70 @@
+x-common: &common
+  restart: unless-stopped
+  networks: [matrix]
+  logging:
+    driver: json-file
+    options:
+      max-size: "20m"
+      max-file: "3"
+
+services:
+  mautrix-telegram:
+    <<: *common
+    image: dock.mau.dev/mautrix/telegram:${MAUTRIX_TELEGRAM_VERSION:-latest}
+    container_name: matrix-bridge-telegram
+    environment:
+      TZ: UTC
+      MAUTRIX_BRIDGE_MTU: "16777216"
+    volumes:
+      - ./bridges/telegram:/data
+    depends_on:
+      - synapse
+
+  mautrix-whatsapp:
+    <<: *common
+    image: dock.mau.dev/mautrix/whatsapp:${MAUTRIX_WHATSAPP_VERSION:-latest}
+    container_name: matrix-bridge-whatsapp
+    environment:
+      TZ: UTC
+      MAUTRIX_BRIDGE_MTU: "16777216"
+    volumes:
+      - ./bridges/whatsapp:/data
+    depends_on:
+      - synapse
+
+  mautrix-signal:
+    <<: *common
+    image: dock.mau.dev/mautrix/signal:${MAUTRIX_SIGNAL_VERSION:-latest}
+    container_name: matrix-bridge-signal
+    environment:
+      TZ: UTC
+      MAUTRIX_BRIDGE_MTU: "16777216"
+    volumes:
+      - ./bridges/signal:/data
+    depends_on:
+      - synapse
+
+  mautrix-discord:
+    <<: *common
+    image: dock.mau.dev/mautrix/discord:${MAUTRIX_DISCORD_VERSION:-latest}
+    container_name: matrix-bridge-discord
+    environment:
+      TZ: UTC
+      MAUTRIX_BRIDGE_MTU: "16777216"
+    volumes:
+      - ./bridges/discord:/data
+    depends_on:
+      - synapse
+
+  matrix-appservice-irc:
+    <<: *common
+    image: matrixdotorg/matrix-appservice-irc:${IRC_BRIDGE_VERSION:-latest}
+    container_name: matrix-bridge-irc
+    environment:
+      TZ: UTC
+    volumes:
+      - ./bridges/irc:/data
+    ports:
+      - "9999:9999"
+    depends_on:
+      - synapse

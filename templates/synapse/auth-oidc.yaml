@@ -1,0 +1,41 @@
+# ===========================================================================
+#  Блок аутентификации: локальные пароли + OIDC (Keycloak)
+#  Добавляется в конец homeserver.yaml, когда включён ENABLE_OIDC
+# ===========================================================================
+
+# Локальные пароли (администратор создаётся регистрацией Synapse)
+password_config:
+  enabled: true
+
+# Вход через внешний OIDC-провайдер (Keycloak).
+# Обработчик: POST /_matrix/client/v3/login -> m.login.token
+# Redirect URI в Keycloak: https://<MATRIX_DOMAIN>/_synapse/client/oidc/callback
+oidc_providers:
+  - idp_id: "keycloak"
+    idp_name: "Keycloak"
+    issuer: "https://${KEYCLOAK_DOMAIN}/realms/matrix"
+    client_id: "matrix"
+    client_secret: "${KEYCLOAK_CLIENT_SECRET}"
+    client_auth_method: "client_secret_post"
+    scopes:
+      - openid
+      - profile
+      - email
+    pkce_method: "always"
+    discover: true
+    # Регистрация новых пользователей при первом входе через SSO
+    enable_registration: true
+    allow_existing_users: true
+    user_mapping_provider:
+      module: "synapse.handlers.oidc.JinjaOidcMappingProvider"
+      config:
+        localpart_template: "{{ user.preferred_username }}"
+        display_name_template: "{{ user.name }}"
+        email_template: "{{ user.email }}"
+
+experimental_features:
+  msc1767_enabled: true
+  msc3391_enabled: true
+  msc3912_enabled: true
+  msc4028_push_encrypted_events: true
+  msc4242_enabled: true

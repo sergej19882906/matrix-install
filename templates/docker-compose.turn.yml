@@ -1,0 +1,15 @@
+services:
+  coturn:
+    image: coturn/coturn:${COTURN_VERSION:-4.6.3}
+    container_name: matrix-coturn
+    restart: unless-stopped
+    network_mode: host
+    command: ["-c", "/etc/coturn/turnserver.conf"]
+    volumes:
+      - ./coturn/turnserver.conf:/etc/coturn/turnserver.conf:ro
+      - ./certbot/conf:/etc/letsencrypt:ro
+    logging:
+      driver: json-file
+      options:
+        max-size: "20m"
+        max-file: "3"

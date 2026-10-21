@@ -1,0 +1,34 @@
+x-common: &common
+  restart: unless-stopped
+  networks: [matrix]
+  logging:
+    driver: json-file
+    options:
+      max-size: "20m"
+      max-file: "3"
+
+services:
+  mas:
+    <<: *common
+    image: ghcr.io/matrix-org/matrix-authentication-service:${MAS_VERSION:-latest}
+    container_name: matrix-mas
+    command: ["server"]
+    environment:
+      TZ: UTC
+    volumes:
+      - ./mas/config.yaml:/config.yaml:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  mas-worker:
+    <<: *common
+    image: ghcr.io/matrix-org/matrix-authentication-service:${MAS_VERSION:-latest}
+    container_name: matrix-mas-worker
+    command: ["worker"]
+    environment:
+      TZ: UTC
+    volumes:
+      - ./mas/config.yaml:/config.yaml:ro
+    depends_on:
+      - mas

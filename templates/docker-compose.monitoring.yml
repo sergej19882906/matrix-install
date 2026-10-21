@@ -1,0 +1,88 @@
+x-common: &common
+  restart: unless-stopped
+  networks: [matrix]
+  logging:
+    driver: json-file
+    options:
+      max-size: "20m"
+      max-file: "3"
+
+services:
+  prometheus:
+    <<: *common
+    image: prom/prometheus:${PROMETHEUS_VERSION:-v2.54.1}
+    container_name: matrix-prometheus
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.path=/prometheus"
+      - "--storage.tsdb.retention.time=30d"
+      - "--web.enable-lifecycle"
+    volumes:
+      - ./monitoring/prometheus:/etc/prometheus:ro
+      - prometheus-data:/prometheus
+    ports:
+      - "127.0.0.1:9090:9090"
+
+  grafana:
+    <<: *common
+    image: grafana/grafana:${GRAFANA_VERSION:-11.2.0}
+    container_name: matrix-grafana
+    environment:
+      TZ: UTC
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD}
+      GF_SERVER_ROOT_URL: https://${GRAFANA_DOMAIN}/
+      GF_SERVER_DOMAIN: ${GRAFANA_DOMAIN}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_ANALYTICS_REPORTING_ENABLED: "false"
+      GF_ANALYTICS_CHECK_FOR_UPDATES: "false"
+      GF_AUTH_ANONYMOUS_ENABLED: "false"
+      GF_INSTALL_PLUGINS: ""
+    volumes:
+      - ./monitoring/grafana/data:/var/lib/grafana
+      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./monitoring/grafana/dashboards:/var/lib/grafana/dashboards:ro
+    depends_on:
+      - prometheus
+
+  node-exporter:
+    <<: *common
+    image: prom/node-exporter:${NODE_EXPORTER_VERSION:-v1.8.2}
+    container_name: matrix-node-exporter
+    command:
+      - "--path.rootfs=/host"
+      - "--collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc)($$|/)"
+    pid: host
+    volumes:
+      - "/:/host:ro"
+
+  postgres-exporter:
+    <<: *common
+    image: prometheuscommunity/postgres-exporter:${POSTGRES_EXPORTER_VERSION:-v0.16.0}
+    container_name: matrix-postgres-exporter
+    environment:
+      DATA_SOURCE_NAME: "postgresql://matrix:${POSTGRES_PASSWORD}@postgres:5432/postgres?sslmode=disable"
+      DATA_SOURCE_URI: "postgres:5432/postgres?sslmode=disable"
+      PG_EXPORTER_USER: matrix
+      PG_EXPORTER_PASSWORD: ${POSTGRES_PASSWORD}
+    depends_on:
+      - postgres
+
+  cadvisor:
+    <<: *common
+    image: gcr.io/cadvisor/cadvisor:${CADVISOR_VERSION:-v0.49.1}
+    container_name: matrix-cadvisor
+    privileged: true
+    command:
+      - "--housekeeping_interval=30s"
+      - "--docker_only=true"
+    volumes:
+      - "/:/rootfs:ro"
+      - "/var/run:/var/run:ro"
+      - "/sys:/sys:ro"
+      - "/var/lib/docker/:/var/lib/docker:ro"
+      - "/dev/disk/:/dev/disk:ro"
+
+volumes:
+  prometheus-data:
+    name: matrix-prometheus-data

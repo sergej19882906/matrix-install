@@ -1,0 +1,32 @@
+# ===========================================================================
+#  Блок аутентификации: legacy MAS (Matrix Authentication Service)
+#
+#  ВНИМАНИЕ: MAS официально задеприкейтирован (последний релиз 0.11.0,
+#  сентябрь 2024). Поддержка msc3861 удалена из Synapse начиная с
+#  версий 2026 года. Этот режим работает только с закреплённой старой
+#  версией Synapse (SYNAPSE_VERSION=v1.98.0).
+#
+#  Для актуального Synapse используйте ENABLE_OIDC=1 (нативный OIDC).
+# ===========================================================================
+
+password_config:
+  enabled: false
+
+experimental_features:
+  msc3861:
+    enabled: true
+    # Synapse получает OIDC-конфигурацию MAS по этому адресу
+    issuer: "https://${MAS_DOMAIN}/"
+    # Должны совпадать с секцией clients в конфигурации MAS
+    client_id: "0000000000000000000SYNAPSE"
+    client_auth_method: client_secret_basic
+    client_secret: "${MAS_CLIENT_SECRET}"
+    # Общий секрет для вызова admin API Synapse (совпадает с matrix.secret в MAS)
+    admin_token: "${MAS_SHARED_SECRET}"
+    # URL управления аккаунтом, который показывают клиенты
+    account_management_url: "https://${MAS_DOMAIN}/account"
+  msc1767_enabled: true
+  msc3391_enabled: true
+  msc3912_enabled: true
+  msc4028_push_encrypted_events: true
+  msc4242_enabled: true

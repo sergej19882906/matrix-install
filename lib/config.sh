@@ -1,0 +1,356 @@
+#!/usr/bin/env bash
+# shellcheck shell=bash
+# ---------------------------------------------------------------------------
+# Конфигурация: config/matrix.env (пользовательские настройки)
+#                $STACK_DIR/.env    (сгенерированные секреты для docker compose)
+# ---------------------------------------------------------------------------
+
+CONFIG_FILE="${CONFIG_FILE:-$SCRIPT_DIR/config/matrix.env}"
+CONFIG_EXAMPLE="$SCRIPT_DIR/config/matrix.env.example"
+
+# Значения по умолчанию (используются в --non-interactive режиме)
+cfg_defaults() {
+	: "${BASE_DOMAIN:=matrix.example.com}"
+	: "${SERVER_NAME:=matrix.$BASE_DOMAIN}"
+	: "${ELEMENT_DOMAIN:=element.$BASE_DOMAIN}"
+	: "${MAS_DOMAIN:=mas.$BASE_DOMAIN}"
+	: "${KEYCLOAK_DOMAIN:=sso.$BASE_DOMAIN}"
+	: "${ADMIN_DOMAIN:=admin.$BASE_DOMAIN}"
+	: "${GRAFANA_DOMAIN:=grafana.$BASE_DOMAIN}"
+	: "${TURN_DOMAIN:=turn.$BASE_DOMAIN}"
+	: "${APEX_DOMAIN:=}"
+	: "${ADMIN_EMAIL:=admin@example.com}"
+	: "${ADMIN_USERNAME:=admin}"
+	: "${SYNAPSE_ADMIN_USERNAME:=admin}"
+	: "${ENABLE_MAS:=0}"
+	: "${ENABLE_OIDC:=1}"
+	: "${ENABLE_KEYCLOAK:=1}"
+	: "${ENABLE_BRIDGES:=1}"
+	: "${ENABLE_IRC:=1}"
+	: "${ENABLE_MONITORING:=1}"
+	: "${ENABLE_TURN:=1}"
+	: "${ENABLE_BACKUP:=1}"
+	: "${ENABLE_DELETION_PROTECTION:=0}"
+	: "${PUBLIC_REGISTRATION:=0}"
+	: "${REGISTRATION_SHARED_SECRET:=}"
+	: "${TELEGRAM_API_ID:=}"
+	: "${TELEGRAM_API_HASH:=}"
+	: "${DISCORD_TOKEN:=}"
+	: "${IRC_SERVER:=}"
+	: "${IRC_NICK:=matrixbridge}"
+	: "${IRC_CHANNEL:=}"
+	: "${IRC_PASSWORD:=}"
+	: "${IRC_REGISTER_NICK:=true}"
+	: "${S3_ENDPOINT:=}"
+	: "${S3_BUCKET:=}"
+	: "${S3_ACCESS_KEY:=}"
+	: "${S3_SECRET_KEY:=}"
+	: "${S3_REGION:=auto}"
+	: "${BACKUP_RETENTION_DAYS:=14}"
+	: "${BACKUP_PASSPHRASE:=}"
+	: "${MAS_VERSION:=latest}"
+	: "${SYNAPSE_VERSION:=latest}"
+	: "${ELEMENT_VERSION:=latest}"
+	: "${MAS_VERSION:=latest}"
+	: "${KEYCLOAK_VERSION:=26.0}"
+	: "${COTURN_VERSION:=4.6.3}"
+	: "${PROMETHEUS_VERSION:=v2.54.1}"
+	: "${GRAFANA_VERSION:=11.2.0}"
+	: "${NODE_EXPORTER_VERSION:=v1.8.2}"
+	: "${POSTGRES_EXPORTER_VERSION:=v0.16.0}"
+	: "${CADVISOR_VERSION:=v0.49.1}"
+	: "${SYNAPSE_ADMIN_VERSION:=latest}"
+	: "${MAUTRIX_TELEGRAM_VERSION:=latest}"
+	: "${MAUTRIX_WHATSAPP_VERSION:=latest}"
+	: "${MAUTRIX_SIGNAL_VERSION:=latest}"
+	: "${MAUTRIX_DISCORD_VERSION:=latest}"
+	: "${IRC_BRIDGE_VERSION:=latest}"
+}
+
+# ---------------------------------------------------------------------------
+load_config() {
+	cfg_defaults
+	if [[ -f "$CONFIG_FILE" ]]; then
+		log "Читаю конфигурацию: $CONFIG_FILE"
+		# shellcheck disable=SC1090
+		source "$CONFIG_FILE"
+		cfg_defaults
+	else
+		warn "Файл конфигурации не найден ($CONFIG_FILE) — будет создан"
+		mkdir -p "$(dirname "$CONFIG_FILE")"
+		cp "$CONFIG_EXAMPLE" "$CONFIG_FILE" 2>/dev/null || true
+		# shellcheck disable=SC1090
+		[[ -f "$CONFIG_FILE" ]] && source "$CONFIG_FILE"
+		cfg_defaults
+		if [[ "$INTERACTIVE" == "1" ]]; then
+			configure_interactively
+		else
+			warn "Неинтерактивный режим: используются домены по умолчанию ($BASE_DOMAIN). Проверьте $CONFIG_FILE"
+		fi
+	fi
+	validate_config
+}
+
+configure_interactively() {
+	step "Интерактивная настройка"
+	BASE_DOMAIN="$(ask BASE_DOMAIN "Основной домен (например matrix.example.com)" "$BASE_DOMAIN")"
+	SERVER_NAME="$(ask SERVER_NAME "Server name (FQDN homeserver)" "matrix.$BASE_DOMAIN")"
+	ELEMENT_DOMAIN="$(ask ELEMENT_DOMAIN "Домен Element Web" "element.$BASE_DOMAIN")"
+	MAS_DOMAIN="$(ask MAS_DOMAIN "Домен Matrix Authentication Service" "mas.$BASE_DOMAIN")"
+	KEYCLOAK_DOMAIN="$(ask KEYCLOAK_DOMAIN "Домен Keycloak (SSO)" "sso.$BASE_DOMAIN")"
+	ADMIN_DOMAIN="$(ask ADMIN_DOMAIN "Домен панели админа" "admin.$BASE_DOMAIN")"
+	GRAFANA_DOMAIN="$(ask GRAFANA_DOMAIN "Домен Grafana" "grafana.$BASE_DOMAIN")"
+	TURN_DOMAIN="$(ask TURN_DOMAIN "Домен TURN/STUN" "turn.$BASE_DOMAIN")"
+	APEX_DOMAIN="$(ask APEX_DOMAIN "Apex-домен для /.well-known (пусто = только через матрикс.орг)" "$APEX_DOMAIN")"
+	ADMIN_EMAIL="$(ask ADMIN_EMAIL "Email администратора (для сертификата и уведомлений)" "$ADMIN_EMAIL")"
+	ADMIN_USERNAME="$(ask ADMIN_USERNAME "Логин администратора Matrix" "$ADMIN_USERNAME")"
+	PUBLIC_REGISTRATION="$(ask PUBLIC_REGISTRATION "Включить свободную регистрацию? (0/1)" "$PUBLIC_REGISTRATION")"
+
+	write_config_file
+}
+
+write_config_file() {
+	mkdir -p "$(dirname "$CONFIG_FILE")"
+	cat >"$CONFIG_FILE" <<EOF
+# Конфигурация Matrix-сервера. Сгенерировано: $(utcnow)
+# Правьте и перезапускайте установщик: bash install.sh --reconfigure
+
+BASE_DOMAIN="$BASE_DOMAIN"
+SERVER_NAME="$SERVER_NAME"
+ELEMENT_DOMAIN="$ELEMENT_DOMAIN"
+MAS_DOMAIN="$MAS_DOMAIN"
+KEYCLOAK_DOMAIN="$KEYCLOAK_DOMAIN"
+ADMIN_DOMAIN="$ADMIN_DOMAIN"
+GRAFANA_DOMAIN="$GRAFANA_DOMAIN"
+TURN_DOMAIN="$TURN_DOMAIN"
+APEX_DOMAIN="$APEX_DOMAIN"
+
+ADMIN_EMAIL="$ADMIN_EMAIL"
+ADMIN_USERNAME="$ADMIN_USERNAME"
+SYNAPSE_ADMIN_USERNAME="$SYNAPSE_ADMIN_USERNAME"
+PUBLIC_REGISTRATION="$PUBLIC_REGISTRATION"
+
+ENABLE_OIDC="$ENABLE_OIDC"
+ENABLE_MAS="$ENABLE_MAS"
+ENABLE_KEYCLOAK="$ENABLE_KEYCLOAK"
+ENABLE_BRIDGES="$ENABLE_BRIDGES"
+ENABLE_IRC="$ENABLE_IRC"
+ENABLE_MONITORING="$ENABLE_MONITORING"
+ENABLE_TURN="$ENABLE_TURN"
+ENABLE_BACKUP="$ENABLE_BACKUP"
+
+TELEGRAM_API_ID="$TELEGRAM_API_ID"
+TELEGRAM_API_HASH="$TELEGRAM_API_HASH"
+DISCORD_TOKEN="$DISCORD_TOKEN"
+IRC_SERVER="$IRC_SERVER"
+IRC_NICK="$IRC_NICK"
+IRC_CHANNEL="$IRC_CHANNEL"
+IRC_PASSWORD="$IRC_PASSWORD"
+
+S3_ENDPOINT="$S3_ENDPOINT"
+S3_BUCKET="$S3_BUCKET"
+S3_ACCESS_KEY="$S3_ACCESS_KEY"
+S3_SECRET_KEY="$S3_SECRET_KEY"
+S3_REGION="$S3_REGION"
+BACKUP_RETENTION_DAYS="$BACKUP_RETENTION_DAYS"
+BACKUP_PASSPHRASE="$BACKUP_PASSPHRASE"
+
+SYNAPSE_VERSION="$SYNAPSE_VERSION"
+ELEMENT_VERSION="$ELEMENT_VERSION"
+MAS_VERSION="$MAS_VERSION"
+KEYCLOAK_VERSION="$KEYCLOAK_VERSION"
+COTURN_VERSION="$COTURN_VERSION"
+PROMETHEUS_VERSION="$PROMETHEUS_VERSION"
+GRAFANA_VERSION="$GRAFANA_VERSION"
+SYNAPSE_ADMIN_VERSION="$SYNAPSE_ADMIN_VERSION"
+MAUTRIX_TELEGRAM_VERSION="$MAUTRIX_TELEGRAM_VERSION"
+MAUTRIX_WHATSAPP_VERSION="$MAUTRIX_WHATSAPP_VERSION"
+MAUTRIX_SIGNAL_VERSION="$MAUTRIX_SIGNAL_VERSION"
+MAUTRIX_DISCORD_VERSION="$MAUTRIX_DISCORD_VERSION"
+IRC_BRIDGE_VERSION="$IRC_BRIDGE_VERSION"
+EOF
+	ok "Конфигурация сохранена: $CONFIG_FILE"
+}
+
+validate_config() {
+	[[ -n "$BASE_DOMAIN" ]] || die "BASE_DOMAIN не задан"
+	[[ "$SERVER_NAME" == *.* ]] || die "SERVER_NAME должен быть FQDN (сейчас: $SERVER_NAME)"
+
+	if [[ "$ENABLE_MAS" == "1" ]]; then
+		# MAS задеприкейтирован и работает только со старым Synapse (msc3861)
+		if [[ "$SYNAPSE_VERSION" == "latest" ]]; then
+			SYNAPSE_VERSION="v1.98.0"
+			warn "Режим MAS: версия Synapse закреплена на $SYNAPSE_VERSION (последняя с поддержкой msc3861)"
+		fi
+		if [[ "$ENABLE_OIDC" == "1" ]]; then
+			ENABLE_OIDC=0
+			warn "Режим MAS: нативный OIDC отключён (используется OIDC-провайдер внутри MAS)"
+		fi
+	else
+		if [[ "$ENABLE_OIDC" == "1" && "$ENABLE_KEYCLOAK" != "1" ]]; then
+			ENABLE_OIDC=0
+			warn "OIDC отключён: Keycloak выключен в конфигурации"
+		fi
+	fi
+
+	ok "Домены: $SERVER_NAME / $ELEMENT_DOMAIN / $MAS_DOMAIN / $KEYCLOAK_DOMAIN / $ADMIN_DOMAIN / $GRAFANA_DOMAIN"
+	ok "Аутентификация: $([[ "$ENABLE_MAS" == "1" ]] && echo "legacy MAS + Keycloak" || { [[ "$ENABLE_OIDC" == "1" ]] && echo "пароли + OIDC (Keycloak)" || echo "локальные пароли"; })"
+}
+
+# ---------------------------------------------------------------------------
+# Генерация секретов и .env для docker compose
+# ---------------------------------------------------------------------------
+generate_stack_env() {
+	step "Генерация секретов"
+	local env_file="$STACK_DIR/.env"
+	mkdir -p "$STACK_DIR"
+
+	# Сохраняем старые секреты при повторной установке
+	local old=""
+	[[ -f "$env_file" ]] && old="$(cat "$env_file")"
+	keep_if_set() {
+		local key=$1
+		local oldval
+		oldval="$(printf '%s\n' "$old" | sed -n "s/^${key}=//p" | tail -1)"
+		if [[ -n "$oldval" ]]; then printf '%s' "$oldval"; else printf '%s' "$2"; fi
+	}
+
+	POSTGRES_PASSWORD="$(keep_if_set POSTGRES_PASSWORD "$(passw 32)")"
+	SYNAPSE_DB_PASSWORD="$(keep_if_set SYNAPSE_DB_PASSWORD "$(passw 32)")"
+	MAS_DB_PASSWORD="$(keep_if_set MAS_DB_PASSWORD "$(passw 32)")"
+	KEYCLOAK_DB_PASSWORD="$(keep_if_set KEYCLOAK_DB_PASSWORD "$(passw 32)")"
+	BRIDGE_DB_PASSWORD="$(keep_if_set BRIDGE_DB_PASSWORD "$(passw 32)")"
+	MAS_SHARED_SECRET="$(keep_if_set MAS_SHARED_SECRET "$(hex 32)")"
+	MAS_ENCRYPTION_KEY="$(keep_if_set MAS_ENCRYPTION_KEY "$(hex 32)")"
+	MAS_CLIENT_SECRET="$(keep_if_set MAS_CLIENT_SECRET "$(hex 32)")"
+	# ULID — стабильный идентификатор OIDC-провайдера в MAS
+	MAS_OIDC_PROVIDER_ID="01H8PKNWKKRPCBW4YGH1RWV279"
+	KEYCLOAK_CLIENT_SECRET="$(keep_if_set KEYCLOAK_CLIENT_SECRET "$(hex 32)")"
+	KEYCLOAK_ADMIN_PASSWORD="$(keep_if_set KEYCLOAK_ADMIN_PASSWORD "$(passw 24)")"
+	SYNAPSE_REGISTRATION_SHARED_SECRET="$(keep_if_set SYNAPSE_REGISTRATION_SHARED_SECRET "$(hex 32)")"
+	TURN_SECRET="$(keep_if_set TURN_SECRET "$(hex 32)")"
+	GRAFANA_ADMIN_PASSWORD="$(keep_if_set GRAFANA_ADMIN_PASSWORD "$(passw 20)")"
+	MACAROON_SECRET_KEY="$(keep_if_set MACAROON_SECRET_KEY "$(hex 32)")"
+	FORM_SECRET="$(keep_if_set FORM_SECRET "$(hex 32)")"
+	COTURN_USER="$(keep_if_set COTURN_USER "matrix")"
+	COTURN_PASSWORD="$(keep_if_set COTURN_PASSWORD "$(passw 20)")"
+	BRIDGE_AS_TOKEN="$(keep_if_set BRIDGE_AS_TOKEN "$(hex 32)")"
+	BRIDGE_HS_TOKEN="$(keep_if_set BRIDGE_HS_TOKEN "$(hex 32)")"
+
+	PUBLIC_IP="$(detect_public_ip)"
+	LETSENCRYPT_CERT="${SERVER_NAME%%.*}"
+	DOCKER_SUBNET="${DOCKER_SUBNET:-$(pick_free_subnet)}"
+	COMPOSE_PROJECT_NAME="matrix"
+	ADMIN_PASSWORD="$(keep_if_set ADMIN_PASSWORD "$(passw 20)")"
+
+	cat >"$env_file" <<EOF
+# Сгенерировано автоматически: $(utcnow). Не коммитьте этот файл!
+COMPOSE_PROJECT_NAME=$COMPOSE_PROJECT_NAME
+
+# --- сеть / адреса ---
+SERVER_NAME=$SERVER_NAME
+PUBLIC_IP=$PUBLIC_IP
+DOCKER_SUBNET=$DOCKER_SUBNET
+LETSENCRYPT_CERT=$LETSENCRYPT_CERT
+
+MATRIX_DOMAIN=$SERVER_NAME
+ELEMENT_DOMAIN=$ELEMENT_DOMAIN
+MAS_DOMAIN=$MAS_DOMAIN
+KEYCLOAK_DOMAIN=$KEYCLOAK_DOMAIN
+ADMIN_DOMAIN=$ADMIN_DOMAIN
+GRAFANA_DOMAIN=$GRAFANA_DOMAIN
+TURN_DOMAIN=$TURN_DOMAIN
+APEX_DOMAIN=$APEX_DOMAIN
+
+# --- БД ---
+POSTGRES_PASSWORD=$POSTGRES_PASSWORD
+SYNAPSE_DB_PASSWORD=$SYNAPSE_DB_PASSWORD
+MAS_DB_PASSWORD=$MAS_DB_PASSWORD
+KEYCLOAK_DB_PASSWORD=$KEYCLOAK_DB_PASSWORD
+BRIDGE_DB_PASSWORD=$BRIDGE_DB_PASSWORD
+
+# --- аутентификация ---
+MAS_SHARED_SECRET=$MAS_SHARED_SECRET
+MAS_ENCRYPTION_KEY=$MAS_ENCRYPTION_KEY
+MAS_CLIENT_SECRET=$MAS_CLIENT_SECRET
+MAS_OIDC_PROVIDER_ID=$MAS_OIDC_PROVIDER_ID
+KEYCLOAK_CLIENT_SECRET=$KEYCLOAK_CLIENT_SECRET
+KEYCLOAK_ADMIN_USER=${KEYCLOAK_ADMIN_USER:-admin}
+KEYCLOAK_ADMIN_PASSWORD=$KEYCLOAK_ADMIN_PASSWORD
+SYNAPSE_REGISTRATION_SHARED_SECRET=$SYNAPSE_REGISTRATION_SHARED_SECRET
+MACAROON_SECRET_KEY=$MACAROON_SECRET_KEY
+FORM_SECRET=$FORM_SECRET
+
+# --- TURN ---
+TURN_SECRET=$TURN_SECRET
+COTURN_USER=$COTURN_USER
+COTURN_PASSWORD=$COTURN_PASSWORD
+
+# --- веб / админка / мониторинг ---
+GRAFANA_ADMIN_PASSWORD=$GRAFANA_ADMIN_PASSWORD
+ADMIN_EMAIL=$ADMIN_EMAIL
+ADMIN_USERNAME=$ADMIN_USERNAME
+ADMIN_PASSWORD=$ADMIN_PASSWORD
+
+# --- мосты ---
+BRIDGE_AS_TOKEN=$BRIDGE_AS_TOKEN
+BRIDGE_HS_TOKEN=$BRIDGE_HS_TOKEN
+TELEGRAM_API_ID=$TELEGRAM_API_ID
+TELEGRAM_API_HASH=$TELEGRAM_API_HASH
+DISCORD_TOKEN=$DISCORD_TOKEN
+DISCORD_BOT_NAME=${DISCORD_BOT_NAME:-discordbot}
+IRC_SERVER=${IRC_SERVER:-irc.libera.chat}
+IRC_NICK=${IRC_NICK:-matrixbridge}
+IRC_CHANNEL=${IRC_CHANNEL:-#matrix}
+IRC_PASSWORD=${IRC_PASSWORD:-}
+IRC_PORT=${IRC_PORT:-6697}
+IRC_REGISTER_NICK=${IRC_REGISTER_NICK:-true}
+
+# --- версии образов ---
+SYNAPSE_VERSION=$SYNAPSE_VERSION
+ELEMENT_VERSION=$ELEMENT_VERSION
+MAS_VERSION=$MAS_VERSION
+KEYCLOAK_VERSION=$KEYCLOAK_VERSION
+COTURN_VERSION=$COTURN_VERSION
+PROMETHEUS_VERSION=$PROMETHEUS_VERSION
+GRAFANA_VERSION=$GRAFANA_VERSION
+NODE_EXPORTER_VERSION=$NODE_EXPORTER_VERSION
+POSTGRES_EXPORTER_VERSION=$POSTGRES_EXPORTER_VERSION
+CADVISOR_VERSION=$CADVISOR_VERSION
+SYNAPSE_ADMIN_VERSION=$SYNAPSE_ADMIN_VERSION
+MAUTRIX_TELEGRAM_VERSION=$MAUTRIX_TELEGRAM_VERSION
+MAUTRIX_WHATSAPP_VERSION=$MAUTRIX_WHATSAPP_VERSION
+MAUTRIX_SIGNAL_VERSION=$MAUTRIX_SIGNAL_VERSION
+MAUTRIX_DISCORD_VERSION=$MAUTRIX_DISCORD_VERSION
+IRC_BRIDGE_VERSION=$IRC_BRIDGE_VERSION
+EOF
+	chmod 600 "$env_file"
+	ok "Секреты записаны: $env_file"
+}
+
+# Загрузить .env стека в окружение (для рендера шаблонов)
+load_stack_env() {
+	local env_file="$STACK_DIR/.env"
+	[[ -f "$env_file" ]] || die "Отсутствует $env_file"
+	set -a
+	# shellcheck disable=SC1090
+	source "$env_file"
+	set +a
+	allowed_vars_set \
+		SERVER_NAME PUBLIC_IP DOCKER_SUBNET LETSENCRYPT_CERT \
+		MATRIX_DOMAIN ELEMENT_DOMAIN MAS_DOMAIN KEYCLOAK_DOMAIN ADMIN_DOMAIN \
+		GRAFANA_DOMAIN TURN_DOMAIN APEX_DOMAIN \
+		POSTGRES_PASSWORD SYNAPSE_DB_PASSWORD MAS_DB_PASSWORD KEYCLOAK_DB_PASSWORD BRIDGE_DB_PASSWORD \
+		MAS_SHARED_SECRET MAS_ENCRYPTION_KEY MAS_CLIENT_SECRET MAS_OIDC_PROVIDER_ID \
+		KEYCLOAK_CLIENT_SECRET \
+		KEYCLOAK_ADMIN_USER KEYCLOAK_ADMIN_PASSWORD SYNAPSE_REGISTRATION_SHARED_SECRET \
+		MACAROON_SECRET_KEY FORM_SECRET \
+		TURN_SECRET COTURN_USER COTURN_PASSWORD GRAFANA_ADMIN_PASSWORD \
+		ADMIN_EMAIL ADMIN_USERNAME BRIDGE_AS_TOKEN BRIDGE_HS_TOKEN \
+		TELEGRAM_API_ID TELEGRAM_API_HASH DISCORD_TOKEN DISCORD_BOT_NAME \
+		IRC_SERVER IRC_NICK IRC_CHANNEL IRC_PASSWORD IRC_PORT IRC_REGISTER_NICK \
+		SYNAPSE_VERSION ELEMENT_VERSION MAS_VERSION KEYCLOAK_VERSION COTURN_VERSION \
+		PROMETHEUS_VERSION GRAFANA_VERSION NODE_EXPORTER_VERSION POSTGRES_EXPORTER_VERSION \
+		CADVISOR_VERSION SYNAPSE_ADMIN_VERSION MAUTRIX_TELEGRAM_VERSION MAUTRIX_WHATSAPP_VERSION \
+		MAUTRIX_SIGNAL_VERSION MAUTRIX_DISCORD_VERSION IRC_BRIDGE_VERSION
+}

@@ -1,0 +1,70 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Установить shellcheck
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq shellcheck gettext-base
+
+      - name: Синтаксис bash
+        run: |
+          for f in install.sh uninstall.sh lib/*.sh ops/*.sh tests/*.sh; do
+            bash -n "$f" || { echo "syntax error in $f"; exit 1; }
+          done
+
+      - name: ShellCheck
+        run: |
+          shellcheck -S warning -e SC1091 install.sh uninstall.sh lib/*.sh ops/*.sh tests/*.sh
+
+      - name: Проверка шаблонов YAML/JSON
+        run: |
+          sudo apt-get install -y -qq python3-yaml
+          python3 - <<'PY'
+          import glob, json, re, sys, yaml
+          bad = 0
+          for f in glob.glob("templates/**/*.y*ml", recursive=True):
+              txt = re.sub(r"\$\{[^}]*\}", "X", open(f, encoding="utf-8").read())
+              try:
+                  yaml.safe_load(txt)
+              except Exception as e:
+                  print(f"YAML FAIL {f}: {e}"); bad = 1
+          for f in glob.glob("templates/**/*.json", recursive=True):
+              txt = re.sub(r"\$\{[^}]*\}", "X", open(f, encoding="utf-8").read())
+              try:
+                  json.loads(txt)
+              except Exception as e:
+                  print(f"JSON FAIL {f}: {e}"); bad = 1
+          sys.exit(bad)
+          PY
+
+  render:
+    name: Render test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Установить зависимости
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq gettext-base python3-yaml
+
+      - name: Рендеринг стека (обычный режим)
+        run: bash tests/render-test.sh default
+
+      - name: Рендеринг стека (legacy MAS)
+        run: bash tests/render-test.sh mas
